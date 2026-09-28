@@ -1,0 +1,20 @@
+{
+  "name": "local-activity-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "papaparse": "^5.5.3"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.3.16",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

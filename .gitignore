@@ -1,0 +1,14 @@
+# Personal activity export: preserve locally, never commit
+/export_*/
+
+# Local web app artifacts
+/web/node_modules/
+/web/dist/
+/web/.vite/
+/.vscode/
+
+# Local secrets and OS metadata
+.env
+.env.*
+!.env.example
+.DS_Store
