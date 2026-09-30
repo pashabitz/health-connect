@@ -2,6 +2,7 @@
 /export_*/
 
 # Local web app artifacts
+/node_modules/
 /web/node_modules/
 /web/dist/
 /web/.vite/

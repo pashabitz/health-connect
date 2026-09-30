@@ -10,9 +10,12 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@clerk/backend": "^3.21.0",
+    "@clerk/clerk-js": "^6.35.0",
     "papaparse": "^5.5.3"
   },
   "devDependencies": {
+    "@types/node": "^26.6.3",
     "@types/papaparse": "^5.3.16",
     "typescript": "~5.8.3",
     "vite": "^6.3.5"
