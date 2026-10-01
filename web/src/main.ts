@@ -3,63 +3,34 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Clerk as ClerkClient } from '@clerk/clerk-js';
 import { Dashboard } from './components/dashboard';
+import { ErrorScreen, HomeScreen, LoadingScreen, SignInScreen } from './screens';
 import type { Dashboard as DashboardData } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('App root is missing');
-const appRoot: HTMLDivElement = app;
+const root = createRoot(app);
 let clerk: ClerkClient | null = null;
 type ClerkUICtor = NonNullable<NonNullable<Parameters<ClerkClient['load']>[0]>['ui']>['ClerkUI'];
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text !== undefined) element.textContent = text;
-  return element;
-}
-
 function renderHome(): void {
-  appRoot.replaceChildren();
-  const main = el('main', 'public-home');
-  const header = el('header', 'public-home__header');
-  const brand = el('a', 'brand');
-  brand.href = '/';
-  brand.append(el('span', 'brand__mark', 'A'), el('span', 'brand__name', 'ACTIVITY LEDGER'));
-  const signInLink = el('a', 'public-home__sign-in', 'Sign in');
-  signInLink.href = '/sign-in';
-  header.append(brand, signInLink);
-
-  const intro = el('section', 'public-home__hero');
-  intro.append(
-    el('p', 'eyebrow', 'YOUR PERSONAL ACTIVITY DASHBOARD'),
-    el('h1', 'public-home__title', 'Activity Ledger'),
-    el('p', 'public-home__copy', 'A clear view of your training history and progress.'),
-  );
-  const dashboardLink = el('a', 'public-home__cta', 'Sign in to continue');
-  dashboardLink.href = '/sign-in';
-  intro.append(dashboardLink);
-  main.append(header, intro);
-  appRoot.append(main);
+  root.render(createElement(HomeScreen));
 }
 
 function render(data: DashboardData): void {
-  createRoot(appRoot).render(createElement(Dashboard, {
+  root.render(createElement(Dashboard, {
     data,
-    onSignOut: async () => {
-      await clerk?.signOut();
-      window.location.assign('/');
-    },
+    onSignOut: signOut,
   }));
+}
+
+async function signOut(): Promise<void> {
+  await clerk?.signOut();
+  window.location.assign('/');
 }
 
 function renderSignIn(): void {
   if (!clerk) return;
-  appRoot.replaceChildren();
-  const main = el('main', 'auth-shell');
-  const signIn = el('div', 'auth-widget');
-  main.append(signIn);
-  appRoot.append(main);
-  clerk.mountSignIn(signIn, { forceRedirectUrl: '/dashboard' });
+  root.render(createElement(SignInScreen, { clerk }));
 }
 
 async function loadClerkUi(publishableKey: string): Promise<ClerkUICtor> {
@@ -81,22 +52,10 @@ async function loadClerkUi(publishableKey: string): Promise<ClerkUICtor> {
 }
 
 function renderError(message = 'The server could not load your activities. Try again in a moment.'): void {
-  appRoot.replaceChildren();
-  const main = el('main', 'error-shell');
-  const mark = el('span', 'brand__mark', '!');
-  const heading = el('h1', '', 'Could not load your activities');
-  const copy = el('p', '', message);
-  main.append(mark, heading, copy);
-  if (clerk?.user) {
-    const signOut = el('button', 'sign-out', 'Sign out');
-    signOut.type = 'button';
-    signOut.addEventListener('click', async () => {
-      await clerk?.signOut();
-      window.location.assign('/');
-    });
-    main.append(signOut);
-  }
-  appRoot.append(main);
+  root.render(createElement(ErrorScreen, {
+    message,
+    onSignOut: clerk?.user ? signOut : undefined,
+  }));
 }
 
 async function renderDashboardPage(): Promise<void> {
@@ -105,9 +64,7 @@ async function renderDashboardPage(): Promise<void> {
     window.location.replace('/sign-in?redirect_url=%2Fdashboard');
     return;
   }
-  const loading = el('p', 'loading-state', 'Loading your activities…');
-  loading.setAttribute('role', 'status');
-  appRoot.replaceChildren(loading);
+  root.render(createElement(LoadingScreen));
   try {
     const token = await currentClerk.session?.getToken();
     if (!token) {
