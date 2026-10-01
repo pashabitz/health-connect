@@ -1,11 +1,9 @@
 import './style.css';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
 import type { Clerk as ClerkClient } from '@clerk/clerk-js';
-import { createActivityInsights } from './components/activity-insights';
-import { createActivityTable } from './components/activity-table';
-import { createDashboardFilters } from './components/dashboard-filters';
-import { createDashboardMetrics } from './components/dashboard-metrics';
-import { formatDate } from './format';
-import type { Activity, Dashboard, DashboardFilterState } from './types';
+import { Dashboard } from './components/dashboard';
+import type { Dashboard as DashboardData } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('App root is missing');
@@ -44,66 +42,14 @@ function renderHome(): void {
   appRoot.append(main);
 }
 
-function render(data: Dashboard): void {
-  appRoot.replaceChildren();
-  const shell = el('main', 'shell');
-  const header = el('header', 'masthead');
-  const brand = el('a', 'brand');
-  brand.href = '#top';
-  brand.setAttribute('aria-label', 'Activity Ledger home');
-  brand.append(el('span', 'brand__mark', 'A'), el('span', 'brand__name', 'ACTIVITY LEDGER'));
-  const signOut = el('button', 'sign-out', 'Sign out');
-  signOut.type = 'button';
-  signOut.addEventListener('click', async () => {
-    await clerk?.signOut();
-    window.location.assign('/');
-  });
-  header.append(brand, signOut);
-
-  const intro = el('section', 'intro');
-  intro.id = 'top';
-  const initialRange = data.summary.dateRange
-    ? `${formatDate(data.summary.dateRange.start)} — ${formatDate(data.summary.dateRange.end)}`
-    : 'No activity dates yet';
-  const range = el('div', 'date-range');
-  const rangeText = el('span', '', initialRange);
-  range.append(el('span', 'date-range__dot'), rangeText);
-  intro.append(range);
-
-  let updateRows = (): void => {};
-  const filters = createDashboardFilters(data.summary.dateRange, Object.keys(data.sportCounts), () => updateRows());
-  const metrics = createDashboardMetrics();
-  const insights = createActivityInsights();
-  const activityTable = createActivityTable();
-  const footer = el('footer', 'footer');
-  footer.append(el('span', '', 'Made for the miles, the climbs, and everything between.'), el('span', 'footer__source', 'LOCAL DATA · PRIVATE BY DEFAULT'));
-  shell.append(header, intro, filters.element, metrics.element, insights.element, activityTable.element, footer);
-  appRoot.append(shell);
-
-  const updateAggregates = (activities: Activity[], rangeActivities: Activity[], filterState: DashboardFilterState): void => {
-    metrics.update(activities);
-    insights.update(activities);
-    const filteredDates = rangeActivities.map((activity) => activity.date).sort();
-    const shownStart = filterState.startDate || filteredDates[0];
-    const shownEnd = filterState.endDate || filteredDates.at(-1);
-    rangeText.textContent = shownStart && shownEnd
-      ? `${formatDate(shownStart)} — ${formatDate(shownEnd)}`
-      : 'No activities in selected dates';
-  };
-
-  updateRows = (): void => {
-    const filterState = filters.getState();
-    const dateFiltered = data.activities.filter((activity) =>
-      (!filterState.startDate || activity.date >= filterState.startDate)
-      && (!filterState.endDate || activity.date <= filterState.endDate),
-    );
-    const globallyFiltered = dateFiltered.filter((activity) =>
-      !filterState.sport || activity.sport === filterState.sport,
-    );
-    if (!filterState.datesReversed) updateAggregates(globallyFiltered, dateFiltered, filterState);
-    activityTable.update(globallyFiltered, !filterState.datesReversed);
-  };
-  updateRows();
+function render(data: DashboardData): void {
+  createRoot(appRoot).render(createElement(Dashboard, {
+    data,
+    onSignOut: async () => {
+      await clerk?.signOut();
+      window.location.assign('/');
+    },
+  }));
 }
 
 function renderSignIn(): void {
@@ -177,7 +123,7 @@ async function renderDashboardPage(): Promise<void> {
       return;
     }
     if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-    render(await response.json() as Dashboard);
+    render(await response.json() as DashboardData);
   } catch (error) {
     console.error(error);
     renderError();

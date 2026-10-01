@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import type { DashboardFilterState } from '../types';
 
 type DateRange = { start: string; end: string } | null;
@@ -6,15 +5,11 @@ type DateRange = { start: string; end: string } | null;
 type DashboardFiltersViewProps = {
   dateRange: DateRange;
   sports: string[];
+  filterState: DashboardFilterState;
   onChange: (state: DashboardFilterState) => void;
 };
 
-export function DashboardFiltersView({ dateRange, sports, onChange }: DashboardFiltersViewProps) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [sport, setSport] = useState('');
-  const datesReversed = Boolean(startDate && endDate && startDate > endDate);
-
+export function DashboardFiltersView({ dateRange, sports, filterState, onChange }: DashboardFiltersViewProps) {
   const emitChange = (nextStartDate: string, nextEndDate: string, nextSport: string): void => {
     onChange({
       startDate: nextStartDate,
@@ -34,11 +29,10 @@ export function DashboardFiltersView({ dateRange, sports, onChange }: DashboardF
             aria-label="Start date"
             min={dateRange?.start}
             max={dateRange?.end}
-            value={startDate}
+            value={filterState.startDate}
             onChange={(event) => {
               const value = event.currentTarget.value;
-              setStartDate(value);
-              emitChange(value, endDate, sport);
+              emitChange(value, filterState.endDate, filterState.sport);
             }}
           />
         </label>
@@ -49,11 +43,10 @@ export function DashboardFiltersView({ dateRange, sports, onChange }: DashboardF
             aria-label="End date"
             min={dateRange?.start}
             max={dateRange?.end}
-            value={endDate}
+            value={filterState.endDate}
             onChange={(event) => {
               const value = event.currentTarget.value;
-              setEndDate(value);
-              emitChange(startDate, value, sport);
+              emitChange(filterState.startDate, value, filterState.sport);
             }}
           />
         </label>
@@ -62,11 +55,10 @@ export function DashboardFiltersView({ dateRange, sports, onChange }: DashboardF
         <span>TYPE</span>
         <select
           aria-label="Filter dashboard by activity type"
-          value={sport}
+          value={filterState.sport}
           onChange={(event) => {
             const value = event.currentTarget.value;
-            setSport(value);
-            emitChange(startDate, endDate, value);
+            emitChange(filterState.startDate, filterState.endDate, value);
           }}
         >
           <option value="">All activities</option>
@@ -75,7 +67,7 @@ export function DashboardFiltersView({ dateRange, sports, onChange }: DashboardF
           ))}
         </select>
       </label>
-      <p className="filter-error" hidden={!datesReversed}>Start date must be on or before end date.</p>
+      <p className="filter-error" hidden={!filterState.datesReversed}>Start date must be on or before end date.</p>
     </section>
   );
 }
