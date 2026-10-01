@@ -2,13 +2,16 @@
 
 import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
-import { loadDashboardData } from './server/activities.mjs';
-import { authenticateRequest } from './server/auth.mjs';
+import activitiesHandler from './api/activities.mjs';
+import uploadsHandler from './api/uploads.mjs';
 
 const appRoot = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, appRoot, '');
+  for (const key of ['CLERK_SECRET_KEY', 'BLOB_READ_WRITE_TOKEN', 'BLOB_STORE_ID', 'VERCEL_OIDC_TOKEN']) {
+    if (env[key]) process.env[key] = env[key];
+  }
   return {
     root: appRoot,
     plugins: [{
@@ -23,42 +26,35 @@ export default defineConfig(({ mode }) => {
           }
           next();
         });
-        server.middlewares.use('/api/activities', async (request, response) => {
-          if (request.method !== 'GET') {
-            response.writeHead(405, { Allow: 'GET', 'Content-Type': 'application/json' });
-            response.end(JSON.stringify({ error: 'Method not allowed' }));
-            return;
-          }
-
-          try {
-            const userId = await authenticateRequest(request, env.CLERK_SECRET_KEY);
-            if (!userId) {
-              response.writeHead(401, {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Cache-Control': 'no-store',
-                'X-Content-Type-Options': 'nosniff',
-              });
-              response.end(JSON.stringify({ error: 'Unauthorized' }));
-              return;
+        for (const [path, handler] of [['/api/activities', activitiesHandler], ['/api/uploads', uploadsHandler]] as const) {
+          server.middlewares.use(path, async (request, response) => {
+            const adaptedResponse = {
+              setHeader: (name: string, value: string) => response.setHeader(name, value),
+              status(code: number) { response.statusCode = code; return this; },
+              json(body: unknown) {
+                response.setHeader('Content-Type', 'application/json; charset=utf-8');
+                response.end(JSON.stringify(body));
+                return this;
+              },
+            };
+            try {
+              let body;
+              if (request.method === 'POST') {
+                const chunks: Buffer[] = [];
+                let size = 0;
+                for await (const chunk of request) {
+                  size += chunk.length;
+                  if (size > 16384) { adaptedResponse.status(413).json({ error: 'Request too large.' }); return; }
+                  chunks.push(chunk);
+                }
+                body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+              }
+              await handler(Object.assign(request, { body }), adaptedResponse);
+            } catch {
+              adaptedResponse.status(400).json({ error: 'Invalid request.' });
             }
-
-            const dashboard = await loadDashboardData();
-            response.writeHead(200, {
-              'Content-Type': 'application/json; charset=utf-8',
-              'Cache-Control': 'no-store',
-              'X-Content-Type-Options': 'nosniff',
-            });
-            response.end(JSON.stringify(dashboard));
-          } catch (error) {
-            console.error('Could not load the local activity CSV:', error);
-            response.writeHead(500, {
-              'Content-Type': 'application/json; charset=utf-8',
-              'Cache-Control': 'no-store',
-              'X-Content-Type-Options': 'nosniff',
-            });
-            response.end(JSON.stringify({ error: 'Could not read activities. Check that the export CSV is present and valid.' }));
-          }
-        });
+          });
+        }
       },
     }],
     server: {

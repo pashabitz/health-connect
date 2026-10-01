@@ -12,6 +12,9 @@
   "dependencies": {
     "@clerk/backend": "^3.21.0",
     "@clerk/clerk-js": "^6.35.0",
+    "@vercel/blob": "^2.8.0",
+    "@zip.js/zip.js": "^2.22.0",
+    "lucide-react": "^1.49.0",
     "papaparse": "^5.5.3",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

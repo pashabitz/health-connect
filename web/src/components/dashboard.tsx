@@ -72,7 +72,10 @@ export function Dashboard({ data, onSignOut }: DashboardProps) {
           <span className="brand__mark">A</span>
           <span className="brand__name">ACTIVITY LEDGER</span>
         </a>
-        <button className="sign-out" type="button" onClick={onSignOut}>Sign out</button>
+        <nav className="account-nav" aria-label="Account">
+          <a href="/upload">Import export</a>
+          <button className="sign-out" type="button" onClick={onSignOut}>Sign out</button>
+        </nav>
       </header>
       <section className="intro" id="top">
         <div className="date-range">
@@ -91,7 +94,7 @@ export function Dashboard({ data, onSignOut }: DashboardProps) {
       <ActivityTableView activities={tableActivities} validDateRange={!filterState.datesReversed} />
       <footer className="footer">
         <span>Made for the miles, the climbs, and everything between.</span>
-        <span className="footer__source">LOCAL DATA · PRIVATE BY DEFAULT</span>
+        <span className="footer__source">YOUR DATA · PRIVATE BY DEFAULT</span>
       </footer>
     </main>
   );

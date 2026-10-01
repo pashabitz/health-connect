@@ -11,5 +11,7 @@
 # Local secrets and OS metadata
 .env
 .env.*
-!.env.example
 .DS_Store
+.vercel
+.env*
+!.env.example

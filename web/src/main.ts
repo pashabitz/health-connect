@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Clerk as ClerkClient } from '@clerk/clerk-js';
 import { Dashboard } from './components/dashboard';
-import { ErrorScreen, HomeScreen, LoadingScreen, SignInScreen } from './screens';
+import { ErrorScreen, HomeScreen, LoadingScreen, SignInScreen, UploadScreen } from './screens';
 import type { Dashboard as DashboardData } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app');
@@ -79,6 +79,10 @@ async function renderDashboardPage(): Promise<void> {
       window.location.replace('/sign-in?redirect_url=%2Fdashboard');
       return;
     }
+    if (response.status === 404) {
+      window.location.replace('/upload');
+      return;
+    }
     if (!response.ok) throw new Error(`Request failed: ${response.status}`);
     render(await response.json() as DashboardData);
   } catch (error) {
@@ -89,7 +93,7 @@ async function renderDashboardPage(): Promise<void> {
 
 async function start(): Promise<void> {
   const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (pathname !== '/' && pathname !== '/sign-in' && pathname !== '/dashboard') {
+  if (pathname !== '/' && pathname !== '/sign-in' && pathname !== '/dashboard' && pathname !== '/upload') {
     renderError('Page not found.');
     return;
   }
@@ -139,7 +143,8 @@ async function start(): Promise<void> {
 
   if (pathname === '/sign-in') {
     if (clerk.user) {
-      window.location.replace('/dashboard');
+      const requested = new URLSearchParams(window.location.search).get('redirect_url');
+      window.location.replace(requested === '/upload' ? '/upload' : '/dashboard');
       return;
     }
     renderSignIn();
@@ -147,7 +152,11 @@ async function start(): Promise<void> {
   }
 
   if (!clerk.user) {
-    window.location.replace('/sign-in?redirect_url=%2Fdashboard');
+    window.location.replace(`/sign-in?redirect_url=${encodeURIComponent(pathname)}`);
+    return;
+  }
+  if (pathname === '/upload') {
+    root.render(createElement(UploadScreen, { clerk, onSignOut: signOut }));
     return;
   }
   await renderDashboardPage();
