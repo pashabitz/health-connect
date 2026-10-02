@@ -78,8 +78,14 @@ test('export tokens are scoped and dashboard reads only the owner path', async (
   process.env.BLOB_READ_WRITE_TOKEN = 'test-read-write-token';
   let constraints;
   const paths = [];
+  const prefixes = [];
   const store = createExportStore({
     generateToken: async (options) => { constraints = options; return 'scoped-token'; },
+    listBlobs: async (options) => {
+      prefixes.push(options.prefix);
+      assert.equal(options.token, 'test-read-write-token');
+      return { blobs: [], hasMore: false };
+    },
     read: async (pathname, options) => {
       paths.push(pathname);
       assert.equal(options.access, 'private');
@@ -97,6 +103,7 @@ test('export tokens are scoped and dashboard reads only the owner path', async (
     assert.equal(await store.dashboard('user_other'), null);
     await assert.rejects(store.finalize('user_other', prepared.uploadId), /Upload not found/);
     assert.ok(paths.every((pathname) => pathname.startsWith('users/user_other/')));
+    assert.deepEqual(prefixes, ['users/user_other/exports/']);
     assert.throws(() => exportPath('../other'), /Invalid user/);
     await assert.rejects(store.finalize('user_owner', '../activities'), /Invalid upload/);
   } finally {
@@ -134,22 +141,33 @@ test('valid export is written under a dated path and becomes the latest export',
   });
   const result = await store.finalize('user_owner', '12345678-1234-4234-8234-123456789abc');
   assert.equal(result.activityCount, 1);
+  assert.equal(written.length, 1);
   assert.match(written[0].pathname, /^users\/user_owner\/exports\/\d{4}-\d{2}-\d{2}\/\d+-[0-9a-f-]+\/activities\.csv$/);
   assert.equal(written[0].options.access, 'private');
   assert.equal(written[0].options.allowOverwrite, false);
   assert.equal(written[0].text, csv);
-  assert.equal(written[1].pathname, 'users/user_owner/latest-export.json');
-  assert.equal(written[1].options.allowOverwrite, true);
-  assert.equal(JSON.parse(written[1].text).pathname, written[0].pathname);
 });
 
-test('keeps previous versions and dashboard reads the most recently finalized export', async () => {
+test('keeps previous versions and dashboard finds the newest export across listing pages', async () => {
   const blobs = new Map();
+  const uploadedAt = new Map();
+  let uploadOrder = 0;
+  let versionPage = 0;
   const store = createExportStore({
     read: async (pathname) => blobs.has(pathname)
       ? { statusCode: 200, stream: new Blob([blobs.get(pathname)]).stream() }
       : null,
-    write: async (pathname, content) => blobs.set(pathname, String(content)),
+    write: async (pathname, content) => {
+      blobs.set(pathname, String(content));
+      if (pathname.includes('/exports/')) uploadedAt.set(pathname, new Date(++uploadOrder * 1000));
+    },
+    listBlobs: async ({ prefix, cursor }) => {
+      assert.equal(prefix, 'users/user_owner/exports/');
+      const versions = [...blobs.keys()].filter((pathname) => pathname.startsWith(prefix));
+      versionPage += 1;
+      if (!cursor) return { blobs: [{ pathname: versions[0], uploadedAt: uploadedAt.get(versions[0]) }], hasMore: true, cursor: 'next-page' };
+      return { blobs: [{ pathname: versions[1], uploadedAt: uploadedAt.get(versions[1]) }], hasMore: false };
+    },
     remove: async (pathname) => blobs.delete(pathname),
     generateToken: async () => 'test-token',
   });
@@ -164,12 +182,14 @@ test('keeps previous versions and dashboard reads the most recently finalized ex
   assert.equal(versions.length, 2);
   assert.notEqual(versions[0], versions[1]);
   const dashboard = await store.dashboard('user_owner');
+  assert.equal(versionPage, 2);
   assert.equal(dashboard.activities[0].name, 'Latest import');
 });
 
-test('dashboard falls back to a legacy flat export when no latest pointer exists', async () => {
+test('dashboard falls back to a legacy flat export when no versions are listed', async () => {
   const csv = makeActivitiesCsv('Legacy import');
   const store = createExportStore({
+    listBlobs: async () => ({ blobs: [], hasMore: false }),
     read: async (pathname) => pathname === 'users/user_owner/activities.csv'
       ? { statusCode: 200, stream: new Blob([csv]).stream() }
       : null,
