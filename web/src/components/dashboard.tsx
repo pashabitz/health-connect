@@ -73,7 +73,7 @@ export function Dashboard({ data, onSignOut }: DashboardProps) {
           <span className="brand__name">ACTIVITY LEDGER</span>
         </a>
         <nav className="account-nav" aria-label="Account">
-          <a href="/upload">Import export</a>
+          <a href="/upload">Import Data</a>
           <button className="sign-out" type="button" onClick={onSignOut}>Sign out</button>
         </nav>
       </header>

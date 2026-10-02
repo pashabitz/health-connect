@@ -133,7 +133,7 @@ export function UploadScreen({ clerk, onSignOut }: { clerk: ClerkClient; onSignO
             }} />
           </label>
           <button className="upload-submit" type="submit" disabled={!file || busy || complete}>
-            <Upload size={16} aria-hidden="true" />{busy ? 'Importing...' : 'Import activities'}
+            <Upload size={16} aria-hidden="true" />{busy ? 'Importing...' : 'Import'}
           </button>
           {busy && <progress className="upload-progress" aria-label="Import in progress" />}
           <p className="upload-status" role="status">{status}</p>

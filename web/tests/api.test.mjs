@@ -116,12 +116,16 @@ test('invalid CSV is removed without replacing the previous export', async () =>
   assert.equal(removed.length, 1);
 });
 
-test('valid export replaces only the owner CSV after validation', async () => {
+function makeActivitiesCsv(name) {
   const header = Array(21).fill('');
   Object.assign(header, { 1: 'Activity Date', 2: 'Activity Name', 3: 'Activity Type', 16: 'Moving Time', 17: 'Distance', 20: 'Elevation Gain' });
   const row = Array(21).fill('');
-  Object.assign(row, { 1: '2026-09-30', 2: 'Morning ride', 3: 'Ride' });
-  const csv = `${header.join(',')}\n${row.join(',')}`;
+  Object.assign(row, { 1: '2026-09-30', 2: name, 3: 'Ride' });
+  return `${header.join(',')}\n${row.join(',')}`;
+}
+
+test('valid export is written under a dated path and becomes the latest export', async () => {
+  const csv = makeActivitiesCsv('Morning ride');
   const written = [];
   const store = createExportStore({
     read: async () => ({ statusCode: 200, stream: new Blob([csv]).stream() }),
@@ -130,9 +134,48 @@ test('valid export replaces only the owner CSV after validation', async () => {
   });
   const result = await store.finalize('user_owner', '12345678-1234-4234-8234-123456789abc');
   assert.equal(result.activityCount, 1);
-  assert.equal(written[0].pathname, 'users/user_owner/activities.csv');
+  assert.match(written[0].pathname, /^users\/user_owner\/exports\/\d{4}-\d{2}-\d{2}\/\d+-[0-9a-f-]+\/activities\.csv$/);
   assert.equal(written[0].options.access, 'private');
+  assert.equal(written[0].options.allowOverwrite, false);
   assert.equal(written[0].text, csv);
+  assert.equal(written[1].pathname, 'users/user_owner/latest-export.json');
+  assert.equal(written[1].options.allowOverwrite, true);
+  assert.equal(JSON.parse(written[1].text).pathname, written[0].pathname);
+});
+
+test('keeps previous versions and dashboard reads the most recently finalized export', async () => {
+  const blobs = new Map();
+  const store = createExportStore({
+    read: async (pathname) => blobs.has(pathname)
+      ? { statusCode: 200, stream: new Blob([blobs.get(pathname)]).stream() }
+      : null,
+    write: async (pathname, content) => blobs.set(pathname, String(content)),
+    remove: async (pathname) => blobs.delete(pathname),
+    generateToken: async () => 'test-token',
+  });
+
+  for (const name of ['First import', 'Latest import']) {
+    const prepared = await store.prepare('user_owner');
+    blobs.set(prepared.pathname, makeActivitiesCsv(name));
+    await store.finalize('user_owner', prepared.uploadId);
+  }
+
+  const versions = [...blobs.keys()].filter((pathname) => pathname.startsWith('users/user_owner/exports/'));
+  assert.equal(versions.length, 2);
+  assert.notEqual(versions[0], versions[1]);
+  const dashboard = await store.dashboard('user_owner');
+  assert.equal(dashboard.activities[0].name, 'Latest import');
+});
+
+test('dashboard falls back to a legacy flat export when no latest pointer exists', async () => {
+  const csv = makeActivitiesCsv('Legacy import');
+  const store = createExportStore({
+    read: async (pathname) => pathname === 'users/user_owner/activities.csv'
+      ? { statusCode: 200, stream: new Blob([csv]).stream() }
+      : null,
+  });
+  const dashboard = await store.dashboard('user_owner');
+  assert.equal(dashboard.activities[0].name, 'Legacy import');
 });
 
 test('server enforces the CSV size limit before saving', async () => {

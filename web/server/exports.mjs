@@ -17,6 +17,14 @@ export function exportPath(userId) {
   return `users/${userId}/activities.csv`;
 }
 
+function exportPrefix(userId) {
+  return `${exportPath(userId).replace(/activities\.csv$/, '')}exports/`;
+}
+
+function latestExportPath(userId) {
+  return `${exportPath(userId).replace(/activities\.csv$/, '')}latest-export.json`;
+}
+
 function blobOptions(options = {}) {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   return token ? { ...options, token } : options;
@@ -30,7 +38,7 @@ function stagingPath(userId, uploadId) {
 }
 
 export function createExportStore({ read = get, write = put, remove = del, generateToken = generateClientTokenFromReadWriteToken } = {}) {
-  async function readCsv(pathname) {
+  async function readText(pathname, maxBytes = MAX_CSV_BYTES, sizeError = 'Activities CSV exceeds 20 MB.') {
     const result = await read(pathname, blobOptions({ access: 'private', useCache: false }));
     if (!result) return null;
     if (result.statusCode !== 200 || !result.stream) throw new Error('Could not read export.');
@@ -42,13 +50,17 @@ export function createExportStore({ read = get, write = put, remove = del, gener
         const { done, value } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > MAX_CSV_BYTES) throw new ExportError('Activities CSV exceeds 20 MB.');
+        if (size > maxBytes) throw new ExportError(sizeError);
         chunks.push(value);
       }
     } finally {
       await reader.cancel();
     }
     return Buffer.concat(chunks).toString('utf8');
+  }
+
+  async function readCsv(pathname) {
+    return readText(pathname);
   }
 
   return {
@@ -76,15 +88,39 @@ export function createExportStore({ read = get, write = put, remove = del, gener
         await remove(pathname, blobOptions());
         throw new ExportError('The file is not a valid Strava activities CSV.');
       }
-      await write(exportPath(userId), csv, blobOptions({
+      const uploadedAt = new Date().toISOString();
+      const versionPath = `${exportPrefix(userId)}${uploadedAt.slice(0, 10)}/${Date.parse(uploadedAt)}-${randomUUID()}/activities.csv`;
+      await write(versionPath, csv, blobOptions({
         access: 'private', contentType: 'text/csv', addRandomSuffix: false,
+        allowOverwrite: false, cacheControlMaxAge: 60,
+      }));
+      await write(latestExportPath(userId), JSON.stringify({ pathname: versionPath, uploadedAt }), blobOptions({
+        access: 'private', contentType: 'application/json', addRandomSuffix: false,
         allowOverwrite: true, cacheControlMaxAge: 60,
       }));
       await remove(pathname, blobOptions()).catch((error) => console.error('Could not remove staged export:', error));
       return { activityCount: activities.length };
     },
     async dashboard(userId) {
-      const csv = await readCsv(exportPath(userId));
+      const latestText = await readText(latestExportPath(userId), 4096, 'Latest export pointer is too large.');
+      let csv;
+      if (latestText !== null) {
+        let pointer;
+        try {
+          pointer = JSON.parse(latestText);
+        } catch {
+          throw new Error('Latest export pointer is invalid.');
+        }
+        if (typeof pointer.pathname !== 'string'
+          || !pointer.pathname.startsWith(exportPrefix(userId))
+          || !pointer.pathname.endsWith('/activities.csv')) {
+          throw new Error('Latest export pointer is invalid.');
+        }
+        csv = await readCsv(pointer.pathname);
+        if (csv === null) throw new Error('Latest export file is missing.');
+      } else {
+        csv = await readCsv(exportPath(userId));
+      }
       return csv === null ? null : buildDashboardData(parseActivitiesCsv(csv));
     },
   };
