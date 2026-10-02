@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Clerk as ClerkClient } from '@clerk/clerk-js';
-import { put } from '@vercel/blob/client';
 import { FileArchive, Upload } from 'lucide-react';
-import { extractActivitiesCsv } from './strava-export.mjs';
 
 type SignInScreenProps = {
   clerk: ClerkClient;
@@ -81,6 +79,10 @@ export function UploadScreen({ clerk, onSignOut }: { clerk: ClerkClient; onSignO
     setComplete(false);
     try {
       setStatus('Preparing export...');
+      const [{ extractActivitiesCsv }, { put }] = await Promise.all([
+        import('./strava-export.mjs'),
+        import('@vercel/blob/client'),
+      ]);
       const csv = await extractActivitiesCsv(file);
       async function request(body: object) {
         const token = await clerk.session?.getToken();

@@ -109,7 +109,7 @@ async function start(): Promise<void> {
   }
 
   try {
-    const { Clerk } = await import('@clerk/clerk-js');
+    const { Clerk } = await import('@clerk/clerk-js/no-rhc');
     clerk = new Clerk(publishableKey);
     if (pathname === '/sign-in') {
       const clerkUi = await loadClerkUi(publishableKey);
